@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="my">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ThinkLab Story Studio — ဇာတ်လမ်းစတူဒီယို</title>
+<meta name="description" content="စိတ်ကူးကို ဇာတ်လမ်း၊ ခေါင်းစဉ်၊ Prompt နှင့် ပုံအဖြစ် ပြောင်းပါ။ Credit စနစ် မရှိပါ။" />
+<link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+<div class="bg-glow"></div>
+
+<!-- ============ AUTH ============ -->
+<main id="authView" class="auth-shell" hidden>
+  <section class="auth-hero">
+    <div class="brand-badge">TL</div>
+    <p class="eyebrow">THINKLAB STORY STUDIO</p>
+    <h1>စိတ်ကူးထဲက ဇာတ်လမ်းကို<br/>ပုံပြင် အဖြစ် ဖန်တီးပါ</h1>
+    <p class="hero-sub">ဇာတ်လမ်းအကျဉ်း၊ ဇာတ်လမ်းအပြည့်၊ ခေါင်းစဉ်၊ Scene Prompt များနှင့် ပုံများ — တစ်နေရာတည်းမှာ။ <strong>Credit စနစ် မရှိပါ၊ အကန့်အသတ်မရှိ အခမဲ့ သုံးနိုင်ပါသည်။</strong></p>
+    <ul class="hero-points">
+      <li>ကိုယ်ပိုင်ဇာတ်ကောင် reference ပုံများဖြင့် ဇာတ်ကောင် မပြောင်းအောင် ထိန်းနိုင်သည်</li>
+      <li>Scene တစ်ခုချင်းစီ ပုံထုတ်ပြီး download လုပ်နိုင်သည်</li>
+      <li>မှတ်တမ်းများ သိမ်းပြီး နောက်မှ ပြန်ဆက်လုပ်နိုင်သည်</li>
+    </ul>
+  </section>
+  <section class="auth-card">
+    <div class="tabs" role="tablist">
+      <button id="tabLogin" class="tab active" type="button">အကောင့်ဝင်ရန်</button>
+      <button id="tabRegister" class="tab" type="button">အကောင့်ဖွင့်ရန်</button>
+    </div>
+    <h2 id="authTitle">အကောင့်ဝင်ရန်</h2>
+    <p id="authSub" class="muted">သင့်စတူဒီယိုသို့ ပြန်လည်ဝင်ရောက်ပါ။</p>
+    <form id="authForm">
+      <label class="field">အသုံးပြုသူအမည်
+        <input id="authUsername" autocomplete="username" placeholder="username" />
+        <small class="hint">အင်္ဂလိပ်စာလုံး၊ ဂဏန်းနှင့် _ သာ။ အက္ခရာ ၃–၅၀ လုံး။</small>
+      </label>
+      <label class="field">စကားဝှက်
+        <span class="pw-wrap"><input id="authPassword" type="password" autocomplete="current-password" placeholder="••••••••" /><button type="button" id="pwToggle" class="ghost small">ပြရန်</button></span>
+        <small class="hint">အက္ခရာ ၈–၁၂၈ လုံး။</small>
+      </label>
+      <p id="authError" class="error" role="alert" hidden></p>
+      <button id="authSubmit" class="primary big" type="submit">အကောင့်ဝင်ရန် →</button>
+    </form>
+    <div id="registerNotes" class="note-box" hidden>
+      <p>အကောင့်သည် ဤဖုန်း/ဘရောက်ဇာနှင့် ချိတ်ဆက်ပါမည်။ ဖုန်းတစ်လုံးလျှင် အကောင့်တစ်ခုသာ ဖွင့်နိုင်ပါသည်။</p>
+      <p>ပထမဆုံး ဖွင့်သော အကောင့်သည် ပိုင်ရှင် (Owner) ဖြစ်ပြီး စီမံခန့်ခွဲမှု စာမျက်နှာကို သုံးနိုင်ပါသည်။</p>
+    </div>
+  </section>
+</main>
+
+<!-- ============ APP ============ -->
+<div id="appView" hidden>
+  <header class="topbar">
+    <div class="brand"><span class="brand-badge small">TL</span><div><strong>ThinkLab Story Studio</strong><small>ဇာတ်လမ်းစတူဒီယို</small></div></div>
+    <nav class="nav">
+      <button data-nav="studio" class="nav-btn active" type="button">စတူဒီယို</button>
+      <button data-nav="image" class="nav-btn" type="button">ပုံဖန်တီးရန်</button>
+      <button data-nav="records" class="nav-btn" type="button">မှတ်တမ်းများ</button>
+      <button data-nav="settings" class="nav-btn" type="button">ဆက်တင်</button>
+      <button data-nav="admin" class="nav-btn" id="navAdmin" type="button" hidden>စီမံခန့်ခွဲမှု</button>
+    </nav>
+    <div class="user-chip"><span id="userName"></span><span id="userRole" class="role"></span></div>
+  </header>
+
+  <main class="container">
+    <!-- ===== STUDIO ===== -->
+    <section id="view-studio">
+      <div class="card">
+        <h3>သင့်ကိုယ်ပိုင် ဇာတ်ကောင်များ ရှိပါသလား။</h3>
+        <p class="muted">ရှိပါက ဇာတ်ကောင်ပုံများကို ထည့်ပြီး ဇာတ်လမ်းတိုင်း၊ ပုံတိုင်းတွင် မှတ်မိနိုင်အောင် ထိန်းထားနိုင်ပါသည်။</p>
+        <div class="chip-row">
+          <button type="button" class="chip" id="ownYes">ရှိပါသည်</button>
+          <button type="button" class="chip" id="ownNo">မရှိပါ</button>
+        </div>
+      </div>
+
+      <div class="card" id="characterCard" hidden>
+        <div class="card-head"><h3>ကိုယ်ပိုင် ဇာတ်ကောင် စတူဒီယို</h3><button type="button" class="secondary" id="addCharacter">+ ဇာတ်ကောင်ထည့်ရန်</button></div>
+        <div id="characterList"></div>
+        <div class="grid2">
+          <label class="field">အခြားဇာတ်ကောင်များ ပါဝင်ခွင့်
+            <select id="allowOthers"><option value="yes">အခြားဇာတ်ကောင်များ ပါဝင်ခွင့်ပြုမည်</option><option value="no">ကျွန်ုပ်၏ ဇာတ်ကောင်များသာ</option></select>
+          </label>
+          <label class="field">ပုံစံ
+            <select id="contextStyle"><option value="photo">ဇာတ်ကောင်ပုံအတိုင်း</option><option value="other">အခြားပုံစံ (အောက်က Art style အတိုင်း)</option></select>
+          </label>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>ဇာတ်လမ်း ဆက်တင်များ</h3>
+        <div class="grid2">
+          <label class="field">ဇာတ်လမ်းအမျိုးအစား
+            <select id="genre"></select>
+          </label>
+          <label class="field">ပုံဖော်မှုပုံစံ (Art style)
+            <select id="artStyle"></select>
+          </label>
+          <label class="field">အဝတ်အစားပုံစံ
+            <select id="clothingStyle"></select>
+          </label>
+          <label class="field">နောက်ခံ မြင်ကွင်း
+            <select id="backgroundStyle"></select>
+          </label>
+          <label class="field">ဇာတ်လမ်း ရေးနည်း
+            <select id="writeMode"><option value="expand">အကျဉ်းမှ ချဲ့ရေးမည်</option><option value="ai">AI အပြည့်ရေးမည်</option></select>
+          </label>
+          <label class="field">အသံ (စကားပြောပုံစံ)
+            <select id="dialogue"><option value="yes">ဇာတ်ကောင်တွေ စကားပြောမယ်</option><option value="no">ဇာတ်ကောင်တွေ စကားမပြောဘူး</option></select>
+          </label>
+        </div>
+        <div class="field"><span class="field-label">ဇာတ်လမ်းကြာချိန်</span>
+          <div class="chip-row" id="durationRow">
+            <button type="button" class="chip" data-dur="1">၁ မိနစ်</button>
+            <button type="button" class="chip active" data-dur="3">၃ မိနစ်</button>
+            <button type="button" class="chip" data-dur="5">၅ မိနစ်</button>
+            <button type="button" class="chip" data-dur="7">၇ မိနစ်</button>
+          </div>
+          <small class="hint">ရွေးထားသော ကြာချိန်သည် ဇာတ်လမ်းဖတ်ချိန်နှင့် ဇာတ်ကွက်အရေအတွက်အတွက်ပါ။</small>
+        </div>
+      </div>
+
+      <div class="card step">
+        <h3><span class="step-no">၁</span> ဇာတ်လမ်းအကျဉ်း</h3>
+        <label class="field">စိတ်ကူး / အကြောင်းအရာ
+          <textarea id="idea" rows="3" placeholder="သင့်စိတ်ကူးကို ဤနေရာတွင် ရေးပါ..."></textarea>
+        </label>
+        <button type="button" class="primary" id="btnSummary">အကျဉ်းထုတ်ရန် (အခမဲ့)</button>
+        <label class="field">ဇာတ်လမ်းအကျဉ်း (ပြင်ဆင်နိုင်သည်)
+          <textarea id="summary" rows="5" placeholder="အကျဉ်းကို ဤနေရာတွင် ဖတ်ရှုနိုင်ပါမည်။"></textarea>
+        </label>
+      </div>
+
+      <div class="card step">
+        <h3><span class="step-no">၂</span> ဇာတ်လမ်းအပြည့်</h3>
+        <label class="field">ဇာတ်သိမ်း (ရွေးချယ်နိုင်)
+          <input id="ending" placeholder="ဇာတ်လမ်းကို ဘယ်လိုအဆုံးသတ်စေချင်လဲ..." />
+        </label>
+        <button type="button" class="primary" id="btnStory">ဇာတ်လမ်းအပြည့် ထုတ်ရန်</button>
+        <label class="field">ဇာတ်လမ်း (ပြင်ဆင်နိုင်သည်)
+          <textarea id="story" rows="10" placeholder="ဇာတ်လမ်းအပြည့်ကို ဤနေရာတွင် ဖတ်ရှုနိုင်ပါမည်။"></textarea>
+        </label>
+      </div>
+
+      <div class="card step">
+        <h3><span class="step-no">၃</span> ခေါင်းစဉ်</h3>
+        <div class="chip-row" id="titleTypeRow">
+          <button type="button" class="chip active" data-tt="engaging">စိတ်ဝင်စားဖွယ်</button>
+          <button type="button" class="chip" data-tt="clickbait">အာရုံဖမ်းစား</button>
+        </div>
+        <button type="button" class="primary" id="btnTitles">ခေါင်းစဉ်များ ထုတ်ရန်</button>
+        <div id="titleList" class="title-list"></div>
+      </div>
+
+      <div class="card step">
+        <h3><span class="step-no">၄</span> ပုံအချိုး</h3>
+        <div class="chip-row" id="ratioRow">
+          <button type="button" class="chip active" data-ratio="9:16">ဒေါင်လိုက် 9:16</button>
+          <button type="button" class="chip" data-ratio="16:9">အလျားလိုက် 16:9</button>
+          <button type="button" class="chip" data-ratio="1:1">စတုရန်း 1:1</button>
+        </div>
+      </div>
+
+      <div class="card step">
+        <h3><span class="step-no">၅</span> ပုံ / ဗီဒီယို Prompt များ</h3>
+        <button type="button" class="primary" id="btnPrompts">Prompt များ ထုတ်ရန်</button>
+        <label class="field">Prompt များ (ပြင်ဆင်နိုင်သည်)
+          <textarea id="prompts" rows="12" placeholder="Prompt များကို ဤနေရာတွင် ဖတ်ရှုနိုင်ပါမည်။"></textarea>
+        </label>
+        <div class="btn-row">
+          <button type="button" class="secondary" id="btnCopyPrompts">အားလုံးကူးရန်</button>
+          <button type="button" class="secondary" id="btnSaveRecord">မှတ်တမ်းသိမ်းရန်</button>
+          <button type="button" class="primary" id="btnToImage">ပုံဖန်တီးရန် စာမျက်နှာသို့ →</button>
+        </div>
+      </div>
+      <p id="studioMsg" class="toast" hidden></p>
+    </section>
+
+    <!-- ===== IMAGE ===== -->
+    <section id="view-image" hidden>
+      <div class="card">
+        <h3>ကိုယ်တိုင် Prompt ဖြင့် ပုံထုတ်ရန်</h3>
+        <label class="field">Image Prompt (အင်္ဂလိပ်)
+          <textarea id="manualPrompt" rows="3" placeholder="e.g. A young man in a Myanmar village at sunset, 3D animation style..."></textarea>
+        </label>
+        <button type="button" class="primary" id="btnManualImage">ပုံထုတ်ရန်</button>
+        <div id="manualResult" class="scene-result"></div>
+      </div>
+      <div class="card">
+        <h3>ဇာတ်ကွက် ပုံများ</h3>
+        <p class="muted">စတူဒီယိုမှာ Prompt ထုတ်ပြီးမှ ဤနေရာတွင် Scene အလိုက် ပုံထုတ်နိုင်ပါသည်။ Scene ထဲပါသော ဇာတ်ကောင်များ၏ ရည်ညွှန်းပုံများကို အလိုအလျောက် ပို့ပေးပါသည်။</p>
+        <div id="thumbnailCard"></div>
+        <div id="sceneList"></div>
+      </div>
+      <div class="card">
+        <h3>သိမ်းထားသော ပုံများ</h3>
+        <div id="mediaGallery" class="gallery"></div>
+      </div>
+      <p id="imageMsg" class="toast" hidden></p>
+    </section>
+
+    <!-- ===== RECORDS ===== -->
+    <section id="view-records" hidden>
+      <div class="card">
+        <div class="card-head"><h3>သိမ်းထားသော မှတ်တမ်းများ</h3><button type="button" class="secondary" id="btnRefreshRecords">ပြန်ဖတ်ရန်</button></div>
+        <div id="recordList"></div>
+      </div>
+    </section>
+
+    <!-- ===== SETTINGS ===== -->
+    <section id="view-settings" hidden>
+      <div class="card">
+        <h3>သင့်အကောင့်</h3>
+        <p class="muted" id="accountInfo"></p>
+        <button type="button" class="secondary danger" id="btnLogout">အကောင့်ထွက်ရန်</button>
+      </div>
+      <div class="card" id="keyCard">
+        <h3>Gemini API Key</h3>
+        <p class="muted" id="keyStatus"></p>
+        <div id="keyForm" hidden>
+          <label class="field">Key အသစ် (ပိုင်ရှင်သာ ထည့်နိုင်သည် — ဆာဗာမှာပဲ သိမ်းပြီး browser မှာ မပေါ်ပါ)
+            <input id="keyInput" placeholder="AQ. ..." autocomplete="off" />
+          </label>
+          <button type="button" class="primary" id="btnSaveKey">Key သိမ်းရန်</button>
+        </div>
+        <p class="muted">အကြံပြုချက်: Replit မှာ Secrets → <code>GEMINI_API_KEY</code> အဖြစ် ထည့်ထားရင် ဤနေရာမှာ ထည့်စရာ မလိုပါ။</p>
+      </div>
+    </section>
+
+    <!-- ===== ADMIN ===== -->
+    <section id="view-admin" hidden>
+      <div class="card">
+        <div class="card-head"><h3>အကောင့်များ စီမံရန်</h3><button type="button" class="secondary" id="btnRefreshUsers">ပြန်ဖတ်ရန်</button></div>
+        <p class="muted">အကောင့် ပိတ်/ဖွင့်၊ စက် ပြန်သတ်မှတ် (device reset)၊ အကောင့် ဖျက် တို့ကို ဤနေရာမှ လုပ်နိုင်ပါသည်။ Credit စနစ် မရှိပါ။</p>
+        <div id="userList"></div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="loading" class="loading" hidden><div class="spinner"></div><p id="loadingText">ဖန်တီးနေပါသည်...</p></div>
+<script src="/app.js"></script>
+</body>
+</html>

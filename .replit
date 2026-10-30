@@ -1,0 +1,6 @@
+run = "node server.js"
+language = "nodejs"
+
+[deployment]
+run = ["sh", "-c", "node server.js"]
+deploymentTarget = "cloudrun"

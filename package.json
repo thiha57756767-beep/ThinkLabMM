@@ -1,0 +1,1 @@
+{"dependencies":{},"description":"ThinkLab Story Studio — AI ဇာတ်လမ်းဖန်တီးရာ (Credit စနစ် မရှိပါ)","engines":{"node":">=18"},"main":"server.js","name":"thinklab-story-studio","scripts":{"start":"node server.js"},"type":"commonjs","version":"1.0.0"}
