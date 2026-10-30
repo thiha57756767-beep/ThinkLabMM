@@ -4,6 +4,7 @@
   --danger:#ff5d6c; --ok:#3ddc97; --radius:16px;
 }
 *{box-sizing:border-box}
+[hidden]{display:none !important}
 html{scroll-behavior:smooth}
 body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans Myanmar","Pyidaungsu","Segoe UI",sans-serif;line-height:1.75;min-height:100dvh}
 .bg-glow{position:fixed;inset:0;z-index:-1;background:
