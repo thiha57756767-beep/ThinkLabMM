@@ -125,8 +125,8 @@ function extractText(data) {
   if (!Array.isArray(parts)) return '';
   return parts.map(p => p.text || '').join('');
 }
-/* Text generation with model fallback chain + retry/backoff. Returns {text} or throws {code} */
-async function generateText(prompt, { maxTokens = 8192, temperature = 0.9 } = {}) {
+/* Text generation with model fallback chain + retry/backoff. Returns {text, finishReason} or throws {code} */
+async function generateTextFull(prompt, { maxTokens = 8192, temperature = 0.9, timeoutMs = 120000 } = {}) {
   const key = geminiKey();
   if (!key) throw { code: 'NO_KEY' };
   let lastErr = null;
@@ -136,11 +136,18 @@ async function generateText(prompt, { maxTokens = 8192, temperature = 0.9 } = {}
         const { status, data } = await geminiCall(model, {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: { temperature, maxOutputTokens: maxTokens },
-        }, key, 45000);
-        if (status === 429 && JSON.stringify(data).toLowerCase().includes('quota')) throw { code: 'AI_QUOTA' };
+        }, key, timeoutMs);
+        if (status === 429) {
+          const bs = JSON.stringify(data).toLowerCase();
+          if (bs.includes('per day') || bs.includes('perday') || bs.includes('daily')) { lastErr = { code: 'AI_QUOTA', status: 429 }; break; } // this model's daily cap — try next model
+          // per-minute rate limit -> treat as busy, backoff + fallback below
+        }
         if (status === 200) {
           const text = extractText(data).trim();
-          if (text) return text;
+          if (text) {
+            const cand = (data.candidates && data.candidates[0]) || {};
+            return { text, finishReason: cand.finishReason || '' };
+          }
           lastErr = { code: 'AI_FAIL' };
         } else if (status === 400 || status === 403) {
           throw { code: status === 403 ? 'NO_KEY' : 'AI_FAIL', status };
@@ -153,10 +160,14 @@ async function generateText(prompt, { maxTokens = 8192, temperature = 0.9 } = {}
         if (e && e.code) throw e;
         lastErr = { code: 'AI_BUSY' };
       }
-      await sleep(700 * (attempt + 1));
+      await sleep((lastErr && lastErr.status === 429 ? 4000 : 700) * (attempt + 1));
     }
   }
   throw lastErr || { code: 'AI_FAIL' };
+}
+async function generateText(prompt, opts) {
+  const r = await generateTextFull(prompt, opts);
+  return r.text;
 }
 /* Image generation (optionally with reference images). Returns {base64, mime} */
 async function generateImage(prompt, aspectRatio, refs) {
@@ -172,7 +183,7 @@ async function generateImage(prompt, aspectRatio, refs) {
           contents: [{ parts }],
           generationConfig: { responseModalities: ['IMAGE'], imageConfig: { aspectRatio: aspectRatio || '9:16' } },
         }, key, 180000);
-        if (status === 429 && JSON.stringify(data).toLowerCase().includes('quota')) throw { code: 'AI_QUOTA' };
+        if (status === 429 && JSON.stringify(data).toLowerCase().includes('quota')) { lastErr = { code: 'AI_QUOTA', status: 429 }; break; } // per-model quota — try next model
         if (status === 200) {
           const ps = (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts) || [];
           const img = ps.find(p => p.inlineData && p.inlineData.data);
@@ -227,26 +238,71 @@ function buildTitlesPrompt(b) {
 ဇာတ်လမ်း:
 ${(b.fullStory || b.summary || '').slice(0, 4000)}`;
 }
+function scenesFor(duration) {
+  const d = Number(duration) || 3;
+  const map = { 1: 8, 3: 18, 5: 28, 7: 38 };
+  return map[d] || Math.max(6, Math.min(40, Math.round(d * 5.5)));
+}
+function countScenes(text) {
+  return ((text || '').match(/^Scene\s+[0-9၀-၉]+\s*[:：]/gim) || []).length;
+}
 function buildPromptsPrompt(b) {
-  const scenes = Math.max(4, Math.min(30, Math.round((Number(b.duration) || 3) * 3)));
-  return `အောက်ပါ မြန်မာဇာတ်လမ်းကို ဗီဒီယိုထုတ်လုပ်ရန် Scene ${scenes} ခု ခွဲပြီး Scene တစ်ခုချင်းစီအတွက် အင်္ဂလိပ်ဘာသာဖြင့် Image Prompt နှင့် Video Prompt ရေးပေးပါ။
+  const scenes = scenesFor(b.duration);
+  const withDialogue = b.dialogue !== 'no';
+  return `အောက်ပါ မြန်မာဇာတ်လမ်းကို ဗီဒီယိုထုတ်လုပ်ရန် Scene ${scenes} ခု ခွဲပြီး Scene တစ်ခုချင်းစီအတွက် အင်္ဂလိပ်ဘာသာဖြင့် Image Prompt နှင့် Video Prompt${withDialogue ? '၊ မြန်မာဘာသာဖြင့် Dialogue စာသားများ' : ''} ရေးပေးပါ။
 ပုံစံ (Art style): ${b.artStyle || '3D animation'}
 ဗီဒီယို အချိုး: ${b.videoRatio || '9:16'}
-စကားပြောပုံစံ: ${b.dialogue === 'no' ? 'ဇာတ်ကောင်တွေ စကားမပြောပါ (narration only)' : 'ဇာတ်ကောင်တွေ စကားပြောသည်'}
+စကားပြောပုံစံ: ${withDialogue ? 'ဇာတ်ကောင်တွေ စကားပြောသည်' : 'ဇာတ်ကောင်တွေ စကားမပြောပါ (narration only)'}
 ${characterContextText(b.characterContext)}
 ခေါင်းစဉ်ရွေးထားသည်: ${b.selectedTitle || ''}
 ဇာတ်လမ်း:
 ${(b.fullStory || b.summary || '').slice(0, 9000)}
 
+အရေးကြီးသော စည်းကမ်းများ:
+- Scene ${scenes} ခု အတိအကျ အပြည့်အစုံ ရေးပါ။ လမ်းတစ်ဝက်မှာ မရပ်ပါနှင့်၊ နောက်ပိုင်း Scene များကို အကျဉ်းချုပ်/ချန်လှပ် မရေးပါနှင့်။
+- Thumbnail အတွက် Cover Text ကို မြန်မာဘာသာဖြင့် တိုတိုပြတ်ပြတ် ဆွဲဆောင်မှုရှိသော headline တစ်ခု ရေးပါ (thumbnail ပုံပေါ်မှာ စာလုံးကြီးကြီး ရေးမည့် စာသားဖြစ်သည်)။
+${withDialogue ? `- Scene တစ်ခုချင်းစီမှာ ဇာတ်ကောင် ၂ ယောက် သို့မဟုတ် ၃ ယောက် အပြန်အလှန် စကားပြောသော Dialogue ကို မြန်မာဘာသာဖြင့် ရေးပါ။ စုစုပေါင်း ပြောချိန် ၁၀ စက္ကန့်ခန့် (မြန်မာစာလုံး ၆၀–၁၀၀ ခန့်) ရှိရမည်။ သဘာဝကျသော နေ့စဉ်သုံး စကားပြောဟန် ဖြစ်ရမည်။ Dialogue သည် အဲဒီ Scene ရဲ့ အဖြစ်အပျက်နှင့် ကိုက်ညီရမည်။` : '- Dialogue မလိုပါ။'}
+
 ပြန်ပေးရမည့် ပုံစံ (အတိအကျ လိုက်နာပါ):
 Thumbnail Prompt: <thumbnail အတွက် အင်္ဂလိပ် prompt တစ်ခု>
+Cover Text: <thumbnail ပေါ်မှာ ရေးမည့် မြန်မာ headline တိုတို>
 
 Scene 1: <scene အမည် တိုတို>
 Included Characters in this Scene: <ပါဝင်သော ဇာတ်ကောင်အမည်များ၊ မပါရင် None>
 Image Prompt: <အင်္ဂလိပ် image prompt>
-Video Prompt: <အင်္ဂလိပ် video prompt — လှုပ်ရှားမှု၊ ကင်မရာ၊ အသံအကျိုးသက်ရောက်မှု ပါရန်>
+Video Prompt: <အင်္ဂလိပ် video prompt — လှုပ်ရှားမှု၊ ကင်မရာ၊ အသံအကျိုးသက်ရောက်မှု${withDialogue ? '၊ ဇာတ်ကောင်များ Dialogue ကို နှုတ်ခမ်းလှုပ်ရှားမှု ကိုက်ညီစွာ ပြောနေပုံ' : ''} ပါရန်>
+${withDialogue ? `Dialogue:
+<ဇာတ်ကောင်အမည်>: "<စကားတစ်ခွန်း>"
+<အခြားဇာတ်ကောင်အမည်>: "<ပြန်ပြောစကား>"
+(အပြန်အလှန် ၂–၄ ကြောင်းခန့်)` : 'Dialogue: မပါ'}
 
 Scene 2: ... စသည်ဖြင့် Scene ${scenes} အထိ ဆက်ရေးပါ။`;
+}
+function buildPromptsContinuePrompt(b, have, target, previousTail) {
+  const withDialogue = b.dialogue !== 'no';
+  return `အောက်ပါ ဗီဒီယို Scene Prompt များ ရေးနေတာ Scene ${have} အထိ ပြီးပါပြီ။ Scene ${have + 1} ကနေ Scene ${target} အထိ ကျန်တာတွေကို အတိအကျ တူညီသော ပုံစံဖြင့် ဆက်ရေးပေးပါ။
+Thumbnail Prompt နဲ့ Cover Text ကို ပြန်မရေးပါနှင့်။ Scene ${have + 1} ကနေ တိုက်ရိုက် စတင်ပါ။
+ပုံစံ (Art style): ${b.artStyle || '3D animation'} · ဗီဒီယို အချိုး: ${b.videoRatio || '9:16'}
+${characterContextText(b.characterContext)}
+ခေါင်းစဉ်: ${b.selectedTitle || ''}
+ဇာတ်လမ်းအပြည့်အစုံ:
+${(b.fullStory || b.summary || '').slice(0, 9000)}
+
+ရေးပြီးသား နောက်ဆုံး အပိုင်း (ဆက်ရန်အတွက်):
+${previousTail}
+
+ပုံစံ:
+Scene ${have + 1}: <scene အမည် တိုတို>
+Included Characters in this Scene: <အမည်များ၊ မပါရင် None>
+Image Prompt: <အင်္ဂလိပ် image prompt>
+Video Prompt: <အင်္ဂလိပ် video prompt>
+${withDialogue ? `Dialogue:
+<ဇာတ်ကောင်အမည်>: "<စကား>"
+(Scene တစ်ခုချင်း Dialogue — ဇာတ်ကောင် ၂–၃ ယောက် အပြန်အလှန်၊ စုစုပေါင်း ၁၀ စက္ကန့်စာ မြန်မာစကား)
+
+Scene ${target} အထိ အပြည့်အစုံ ဆက်ရေးပါ။ မရပ်ပါနှင့်။` : `Dialogue: မပါ
+
+Scene ${target} အထိ အပြည့်အစုံ ဆက်ရေးပါ။ မရပ်ပါနှင့်။`}`;
 }
 function buildTraitsPrompt(b) {
   const names = (b.context && b.context.characters || []).map(c => c.name).join(', ');
@@ -329,13 +385,36 @@ const server = http.createServer(async (req, res) => {
       const b = await readJsonBody(req);
       try {
         if (p === '/api/ai/summary') return send(res, 200, { summary: await generateText(buildSummaryPrompt(b)) });
-        if (p === '/api/ai/story') return send(res, 200, { story: await generateText(buildStoryPrompt(b), { maxTokens: 16384 }) });
+        if (p === '/api/ai/story') {
+          const first = await generateTextFull(buildStoryPrompt(b), { maxTokens: 16384 });
+          let story = first.text; let fr = first.finishReason; let guard = 0;
+          while (fr === 'MAX_TOKENS' && guard < 2) {
+            guard++;
+            const cont = await generateTextFull(`အောက်ပါ မြန်မာဇာတ်လမ်းကို ရပ်သွားတဲ့ နေရာကနေ အတိအကျ ဆက်ရေးပေးပါ။ ရေးပြီးသား အပိုင်းကို ပြန်မရေးပါနှင့်။ ဇာတ်လမ်း အဆုံးသတ်သည်အထိ ဆက်ရေးပါ။ ခေါင်းစဉ်/ရှင်းလင်းချက် မထည့်ပါနှင့်။\n\nဇာတ်လမ်း နောက်ဆုံး အပိုင်း:\n${story.slice(-2500)}\n\nဆက်ရေးရန်:`, { maxTokens: 16384 });
+            if (!cont.text) break;
+            story += '\n' + cont.text; fr = cont.finishReason;
+          }
+          return send(res, 200, { story });
+        }
         if (p === '/api/ai/titles') {
           const raw = await generateText(buildTitlesPrompt(b), { temperature: 1.0 });
           const titles = raw.split('\n').map(s => s.replace(/^\s*[\d၀-၉]+[\.\)၊]\s*/, '').replace(/^[\-•]\s*/, '').trim()).filter(s => s.length > 1 && s.length <= 120).slice(0, 8);
           return send(res, 200, { titles });
         }
-        if (p === '/api/ai/prompts') return send(res, 200, { prompts: await generateText(buildPromptsPrompt(b), { maxTokens: 16384, temperature: 0.8 }) });
+        if (p === '/api/ai/prompts') {
+          const target = scenesFor(b.duration);
+          const first = await generateTextFull(buildPromptsPrompt(b), { maxTokens: 32768, temperature: 0.8 });
+          let full = first.text;
+          let guard = 0;
+          while (countScenes(full) < target && guard < 3) {
+            guard++;
+            const have = countScenes(full);
+            const cont = await generateTextFull(buildPromptsContinuePrompt(b, have, target, full.slice(-2000)), { maxTokens: 32768, temperature: 0.8 });
+            if (!cont.text || countScenes(cont.text) === 0) break;
+            full += '\n' + cont.text;
+          }
+          return send(res, 200, { prompts: full, targetScenes: target, sceneCount: countScenes(full) });
+        }
         if (p === '/api/ai/traits') {
           const raw = await generateText(buildTraitsPrompt(b), { temperature: 0.6 });
           let parsed = null;

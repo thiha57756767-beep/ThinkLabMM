@@ -92,3 +92,5 @@ code{background:#0e1230;padding:1px 6px;border-radius:6px;color:var(--amber)}
 .loading{position:fixed;inset:0;background:rgba(5,7,16,.75);display:grid;place-items:center;align-content:center;gap:12px;z-index:50}
 .spinner{width:44px;height:44px;border-radius:50%;border:4px solid var(--line);border-top-color:var(--amber);animation:spin 1s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+.cover-text{font-size:20px;background:#241a06;border:1px solid var(--amber);color:#ffd98a;border-radius:12px;padding:10px 14px;margin:8px 0}
+.dialogue-box{background:var(--card2);border:1px solid var(--line);border-left:4px solid var(--vio);border-radius:12px;padding:10px 14px;margin:8px 0;white-space:normal}

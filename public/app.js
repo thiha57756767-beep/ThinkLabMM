@@ -262,7 +262,10 @@ $('#btnPrompts').onclick = async () => {
   busy('Prompt များ ထုတ်နေသည်... (ခဏကြာနိုင်ပါသည်)', true);
   try {
     const d = await api('/api/ai/prompts', { method: 'POST', body: JSON.stringify({ ...payloadBase(), fullStory: draft.story, selectedTitle: draft.selectedTitle, videoRatio: draft.videoRatio }) });
-    draft.prompts = d.prompts; $('#prompts').value = d.prompts; parseScenes(); toast('#studioMsg', 'Prompt များ ရပါပြီ။');
+    draft.prompts = d.prompts; $('#prompts').value = d.prompts; parseScenes();
+    if (d.sceneCount != null && d.targetScenes != null) {
+      toast('#studioMsg', d.sceneCount >= d.targetScenes ? `Prompt များ ရပါပြီ — Scene ${d.sceneCount} ခု အပြည့်အစုံ ရပါပြီ ✅` : `Prompt များ ရပါပြီ — Scene ${d.sceneCount}/${d.targetScenes} ခုသာ ရသေးသည်။ ထပ်ထုတ်ကြည့်ပါ။`);
+    } else toast('#studioMsg', 'Prompt များ ရပါပြီ။');
   } catch (e) { toast('#studioMsg', e.message); } finally { busy('', false); }
 };
 $('#btnCopyPrompts').onclick = async () => {
@@ -286,14 +289,17 @@ function parseScenes() {
   scenes = [];
   const text = draft.prompts || '';
   const thumb = (text.match(/Thumbnail Prompt\s*[:：]\s*([^\n]+)/i) || [])[1] || '';
+  const cover = (text.match(/Cover Text\s*[:：]\s*([^\n]+)/i) || [])[1] || '';
   const blocks = text.split(/(?=^Scene\s+\d+\s*[:：])/m).filter(b => /^Scene\s+\d+/m.test(b));
   for (const b of blocks) {
     const head = b.match(/^Scene\s+(\d+)\s*[:：]?\s*(.*)$/m);
     const img = (b.match(/Image Prompt\s*[:：]\s*([\s\S]*?)(?=\n\s*Video Prompt\s*[:：]|$)/i) || [])[1] || '';
+    const vid = (b.match(/Video Prompt\s*[:：]\s*([\s\S]*?)(?=\n\s*Dialogue\s*[:：]|$)/i) || [])[1] || '';
+    const dlg = (b.match(/Dialogue\s*[:：]?\s*\n?([\s\S]*?)$/i) || [])[1] || '';
     const chars = (b.match(/Included Characters in this Scene\s*[:：]\s*([^\n]+)/i) || [])[1] || '';
-    if (head) scenes.push({ number: Number(head[1]), name: (head[2] || '').trim(), imagePrompt: img.trim(), characters: chars.trim() });
+    if (head) scenes.push({ number: Number(head[1]), name: (head[2] || '').trim(), imagePrompt: img.trim(), videoPrompt: vid.trim(), dialogue: dlg.replace(/^-{3,}\s*$/gm, '').trim(), characters: chars.trim() });
   }
-  renderScenes(thumb);
+  renderScenes(thumb, cover);
 }
 function refAssetIdsFor(scene) {
   if (draft.hasOwnCharacters !== true || !scene.characters || /none/i.test(scene.characters)) return [];
@@ -303,22 +309,28 @@ function refAssetIdsFor(scene) {
   }
   return ids.slice(0, 5);
 }
-function renderScenes(thumbPrompt) {
+function renderScenes(thumbPrompt, coverText) {
   const tc = $('#thumbnailCard'); tc.innerHTML = '';
   if (thumbPrompt) {
-    tc.innerHTML = `<div class="scene-card"><h4>မျက်နှာဖုံးပုံ (Thumbnail)</h4><p class="muted">${esc(thumbPrompt)}</p><button type="button" class="primary" data-thumb>Thumbnail ပုံထုတ်ရန်</button><div class="scene-result"></div></div>`;
+    tc.innerHTML = `<div class="scene-card"><h4>မျက်နှာဖုံးပုံ (Thumbnail)</h4><p class="muted">${esc(thumbPrompt)}</p>${coverText ? `<div class="cover-text">Cover Text: <strong>${esc(coverText)}</strong></div><div class="btn-row"><button type="button" class="secondary" data-cover>Cover Text ကူးရန်</button></div><p class="muted">မှတ်ချက်: ပုံထုတ်ပြီးရင် ဒီ မြန်မာစာသားကို ပုံပေါ်မှာ စာလုံးကြီးကြီး သပ်သပ်ရပ်ရပ် ထည့်ရေးပါ (ပုံထဲမှာ AI ကို မြန်မာစာ မရေးခိုင်းပါနှင့် — စာလုံး ပျက်တတ်ပါသည်)။</p>` : ''}<button type="button" class="primary" data-thumb>Thumbnail ပုံထုတ်ရန်</button><div class="scene-result"></div></div>`;
     tc.querySelector('[data-thumb]').onclick = e => generateInto(e.target.closest('.scene-card').querySelector('.scene-result'), { imagePrompt: thumbPrompt, aspectRatio: draft.videoRatio, sceneName: 'Thumbnail', storyTitle: draft.selectedTitle });
+    const cb = tc.querySelector('[data-cover]');
+    if (cb) cb.onclick = async () => { try { await navigator.clipboard.writeText(coverText); toast('#imageMsg', 'Cover Text ကို ကူးယူပြီးပါပြီ ✅'); } catch { toast('#imageMsg', 'ကူးယူ၍ မရပါ။'); } };
   }
   const wrap = $('#sceneList'); wrap.innerHTML = scenes.length ? '' : '<p class="muted">Scene မရှိသေးပါ။</p>';
   for (const s of scenes) {
     const refs = refAssetIdsFor(s);
+    const hasDlg = s.dialogue && !/^မပါ/.test(s.dialogue);
     const card = document.createElement('div'); card.className = 'scene-card';
     card.innerHTML = `<h4>ဇာတ်ကွက် ${s.number}${s.name ? ' — ' + esc(s.name) : ''}</h4>
       <p class="muted">ပါဝင်သော ဇာတ်ကောင်: ${esc(s.characters || '—')} · ရည်ညွှန်းပုံ: ${refs.length ? refs.length + ' ပုံ ပို့မည်' : 'မပါ'}</p>
       <p>${esc(s.imagePrompt)}</p>
-      <div class="btn-row"><button type="button" class="primary" data-gen>ပုံထုတ်ရန်</button><button type="button" class="secondary" data-copy-nar>Copy narration အတွက် ဇာတ်လမ်းကူးရန်</button></div>
+      ${hasDlg ? `<div class="dialogue-box"><strong>Dialogue (၁၀ စက္ကန့်စာ):</strong><br/>${esc(s.dialogue).replace(/\n/g, '<br/>')}</div>` : ''}
+      <div class="btn-row"><button type="button" class="primary" data-gen>ပုံထုတ်ရန်</button>${hasDlg ? '<button type="button" class="secondary" data-copy-dlg>Dialogue ကူးရန်</button>' : ''}<button type="button" class="secondary" data-copy-nar>Copy narration အတွက် ဇာတ်လမ်းကူးရန်</button></div>
       <div class="scene-result"></div>`;
     card.querySelector('[data-gen]').onclick = () => generateInto(card.querySelector('.scene-result'), { imagePrompt: s.imagePrompt, aspectRatio: draft.videoRatio, sceneNumber: s.number, sceneName: s.name, storyTitle: draft.selectedTitle, referenceAssetIds: refs });
+    const db = card.querySelector('[data-copy-dlg]');
+    if (db) db.onclick = async () => { try { await navigator.clipboard.writeText(s.dialogue); toast('#imageMsg', 'Dialogue ကို ကူးယူပြီးပါပြီ ✅'); } catch { toast('#imageMsg', 'ကူးယူ၍ မရပါ။'); } };
     card.querySelector('[data-copy-nar]').onclick = async () => { try { await navigator.clipboard.writeText(draft.story || draft.summary); toast('#imageMsg', 'ဇာတ်လမ်းကို ကူးယူပြီးပါပြီ။ အသံသွင်းရန် သင်နှစ်သက်ရာ Voice tool မှာ သုံးနိုင်ပါသည်။'); } catch { toast('#imageMsg', 'ကူးယူ၍ မရပါ။'); } };
     wrap.appendChild(card);
   }
